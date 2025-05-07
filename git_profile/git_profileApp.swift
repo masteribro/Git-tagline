@@ -25,7 +25,7 @@ struct git_profileApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            LoginPage()
         }
         .modelContainer(sharedModelContainer)
     }

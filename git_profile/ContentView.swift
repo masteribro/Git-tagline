@@ -9,58 +9,120 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    let username: String
+    @State private var user:GitHubUser?
+    
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
+        ZStack{
+            Color.black
+            .ignoresSafeArea()
+            VStack(spacing:20){
+                
+                AsyncImage(url: URL(string: user?.avatarUrl ?? "")){image in
+                    image.resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(Circle())
+                    
+                }placeholder: {
+                    Circle().foregroundColor(.secondary)
+                        
+                }.frame(width: 120, height: 120)
+                
+                
+                Text(user?.name ?? "User Name")
+                    .bold()
+                    .font(.title3)
+                    .foregroundColor(.white)
+                HStack{
+                    Text("@\(user?.login ?? "User Name")")
+                        .foregroundColor(.white)
+                        .bold()
+                 
                 }
-                .onDelete(perform: deleteItems)
-            }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
-        }
-    }
+                
+                Text(user?.bio ?? "No Bio" )
+                    .padding()
+                    .foregroundColor(.white)
+                
+                 
+                
+                HStack {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Location:")
+                                .foregroundColor(.white)
+                                .bold()
+                            Text(user?.location ?? "N/A")
+                                .foregroundColor(.white)
+                        }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+                        HStack {
+                            Text("Public Repos:")
+                                .foregroundColor(.white)
+                                .bold()
+                            Text("\(user?.publicRepos ?? 0)")
+                                .foregroundColor(.white)
+                        }
+                    }
+                    Spacer()
+                }
+                .padding()
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(8)
+                
+                
+            }
+            .task {
+                do{
+                    user = try await getUser()
+                }catch GHError.invalidResponse{
+                    print("invalid url")
+                }catch{
+                    print("Error")
+                }
             }
         }
+   
+    }
+        
+
+    func getUser()async throws->GitHubUser{
+      let endpoint = "https://api.github.com/users/\(username)"
+        guard let url = URL(string: endpoint) else {
+            throw GHError.invalidResponse
+        }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as?   HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw GHError.invalidResponse
+            
+        }
+        do{
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            return try decoder.decode(GitHubUser.self, from: data)
+        }catch{
+            throw GHError.decodingFailed
+        }
+       
     }
 }
 
 #Preview {
-    ContentView()
+    ContentView(username: "masteribro") 
         .modelContainer(for: Item.self, inMemory: true)
 }
+struct GitHubUser: Codable {
+    let login: String
+    let avatarUrl: String
+    let bio: String?
+    let name: String?
+    let location: String?
+    let publicRepos: Int?
+}
+
+enum GHError: Error {
+    case invalidResponse
+    case decodingFailed
+}
+
